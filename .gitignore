@@ -1,2 +1,4 @@
 .env
 api/firebase-adminsdk.json
+node_modules/
+dist/ 
