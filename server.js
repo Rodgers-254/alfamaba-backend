@@ -1,50 +1,48 @@
 // server.js
-import 'dotenv/config';             // loads .env in dev
+import 'dotenv/config';
 import express from 'express';
-import cors    from 'cors';
+import cors from 'cors';
 import { fileURLToPath } from 'url';
-import { dirname, resolve, join }  from 'path';
+import { dirname, resolve, join } from 'path';
 
+// Express init
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ── Determine __dirname for ESM ───────────────────────────────────────────
+// ── Setup __dirname for ESM ────────────────────────────────
 const __filename = fileURLToPath(import.meta.url);
-const __dirname  = dirname(__filename);
+const __dirname = dirname(__filename);
 
-// ── 0) Serve your built React app from dist/ ──────────────────────────────
+// ── 0) Serve built React app ───────────────────────────────
 const staticDir = resolve(__dirname, 'dist');
 app.use(express.static(staticDir));
 
-// ── 1) Health‑check ───────────────────────────────────────────────────────
+// ── 1) Health check ────────────────────────────────────────
 app.get('/api/health', (_req, res) => {
   res.send('OK 👍');
 });
 
-// ── 2) GET /api/bookings ──────────────────────────────────────────────────
+// ── 2) GET /api/bookings ───────────────────────────────────
 const getBookingsPath = resolve(__dirname, 'api/getBookings.js');
 const { default: getBookingsHandler } = await import(`file://${getBookingsPath}`);
 app.get('/api/bookings', getBookingsHandler);
 
-// ── 3) POST /api/bookings ─────────────────────────────────────────────────
+// ── 3) POST /api/bookings ──────────────────────────────────
 const postBookingPath = resolve(__dirname, 'api/postBooking.js');
 const { default: postBookingHandler } = await import(`file://${postBookingPath}`);
 app.post('/api/bookings', postBookingHandler);
 
-// ── 4) (Optional) Service Orders ──────────────────────────────────────────
-// If you still have a serviceOrders handler, uncomment and adjust:
-// const serviceOrdersPath  = resolve(__dirname, 'api/serviceOrders.js');
-// const { default: serviceOrdersHandler } = await import(`file://${serviceOrdersPath}`);
-// app.post('/api/serviceOrders', serviceOrdersHandler);
+// ── ✅ 4) Add full /api/serviceOrders router ───────────────
+import serviceOrdersRouter from './routes/serviceOrders.js';
+app.use('/api/serviceOrders', serviceOrdersRouter);  // <-- this line connects it
 
-// ── 5) SPA Fallback ───────────────────────────────────────────────────────
-// Any GET not matching /api or a real file serves index.html
+// ── 5) SPA fallback ────────────────────────────────────────
 app.get('*', (_req, res) => {
   res.sendFile(join(staticDir, 'index.html'));
 });
 
-// ── 6) Start the server ───────────────────────────────────────────────────
+// ── 6) Start server ────────────────────────────────────────
 const port = process.env.PORT || 4000;
 app.listen(port, () => {
   console.log(`🚀 Server listening on port ${port}`);
