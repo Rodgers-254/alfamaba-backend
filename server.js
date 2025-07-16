@@ -34,7 +34,7 @@ const { default: postBookingHandler } = await import(`file://${postBookingPath}`
 app.post('/api/bookings', postBookingHandler);
 
 // ── ✅ 4) Add full /api/serviceOrders router ───────────────
-import serviceOrdersRouter from './routes/serviceOrders.js';
+import serviceOrdersRouter from './api/serviceOrders.js';
 app.use('/api/serviceOrders', serviceOrdersRouter);  // <-- this line connects it
 
 // ── 5) SPA fallback ────────────────────────────────────────
