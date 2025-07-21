@@ -37,7 +37,7 @@ export default [
 
       const mailOptions = {
         from: process.env.EMAIL_USER,
-        to: 'alfamabacommunity@gmail.com',
+        to: 'rogiamani8@gmail.com.com',
         subject: `New Career Application from ${fullName}`,
         text: `
 Name: ${fullName}

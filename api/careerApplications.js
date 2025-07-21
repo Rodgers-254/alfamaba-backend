@@ -37,7 +37,7 @@ const handler = async (req, res) => {
 
     const mailOptions = {
       from: process.env.MAIL_USER,
-      to: 'alfamabacommunity@gmail.com',
+      to: 'rogiamani8@gmail.com',
       subject: `🎯 New Career Application from ${fullName}`,
       text: `
 New service provider application:
