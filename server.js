@@ -1,7 +1,7 @@
 // server.js or index.js
 import express from 'express';
 import cors from 'cors';
-import serviceOrdersRoute from './api/serviceOrders.js'; // adjust path if needed
+import serviceOrdersRoute from './routes/serviceOrders.js'; // adjust path if needed
 
 const app = express();
 
