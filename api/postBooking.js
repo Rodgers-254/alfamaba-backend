@@ -52,6 +52,8 @@ export default async function handler(req, res) {
       const category       = payload.category;
       const location       = payload.location;
       const quantity       = typeof payload.quantity === 'number' ? payload.quantity : 1;
+      const price          = typeof payload.price === 'number'    ? payload.price    : 0;
+      const amount         = price * quantity;  // ← total amount
 
       // location object
       const loc = location.address
@@ -69,6 +71,8 @@ export default async function handler(req, res) {
         subserviceName,
         category,
         location: loc,
+        price,    // unit price
+        amount,   // total price
         createdAt: timestamp,
       };
 
@@ -76,7 +80,7 @@ export default async function handler(req, res) {
       messageBody =
         `📦 New booking: ${name}\n` +
         `👤 ${name} • ${phone}\n` +
-        `✂️ ${quantity}× ${subserviceName}\n` +
+        `✂️ ${quantity}× ${subserviceName} @ KES${price} = KES${amount}\n` +
         `💼 Service: ${serviceName}\n` +
         `🗓 ${date} @ ${time}\n` +
         `📍 ${loc.address ?? `${loc.latitude},${loc.longitude}`}`;
