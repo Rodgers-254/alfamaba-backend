@@ -1,12 +1,17 @@
-// firebaseAdmin.js (at the root of alfamaba-backend)
+// alfamaba-backend/firebaseadmin.js
+import { initializeApp, applicationDefault } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
+import { getAuth } from 'firebase-admin/auth';
+import { getStorage } from 'firebase-admin/storage';
 import admin from 'firebase-admin';
-import path from 'path';
 
-// Construct an absolute path to your JSON file in the api folder:
-const serviceAccountPath = path.join(__dirname, 'api', 'firebase-adminsdk.json');
-
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccountPath),
+const app = initializeApp({
+  credential: applicationDefault(),
+  storageBucket: 'alfamaba-ed838.appspot.com',
 });
 
-export const db = admin.firestore();
+const db = getFirestore(app);
+const auth = getAuth(app);
+const bucket = getStorage(app);
+
+export { admin, db, auth, bucket };

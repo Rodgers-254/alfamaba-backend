@@ -1,71 +1,51 @@
-// server.js
-import 'dotenv/config';
+// api/serviceOrders.js
 import express from 'express';
-import cors from 'cors';
-import { fileURLToPath } from 'url';
-import { dirname, resolve, join } from 'path';
+import { db } from '../firebaseconfig.js';
+import { collection, addDoc } from 'firebase/firestore';
 
-import admin from 'firebase-admin';
-import path from 'path';
+const router = express.Router();
 
-// ── Firebase Admin Initialization ────────────────────────────
-// Derive __dirname in ESM
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+router.post('/', async (req, res) => {
+  try {
+    const {
+      customerName,
+      phone,
+      serviceName,
+      providerName,
+      date,
+      time,
+      location,
+      category,
+      status = 'pending',
+      coordinates,
+      quantity
+    } = req.body;
 
-// Load your service account key JSON (in api/firebase-adminsdk.json)
-const serviceAccountPath = path.join(__dirname, 'api', 'firebase-adminsdk.json');
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccountPath),
-});
-export const db = admin.firestore();
+    if (!customerName || !phone || !serviceName) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
 
-// ── App Setup ─────────────────────────────────────────────────
-const app = express();
-app.use(cors());
-app.use(express.json());
+    const newBooking = {
+      customerName,
+      phone,
+      serviceName,
+      providerName: providerName || '',
+      date: date || '',
+      time: time || '',
+      location: location || '',
+      category: category || '',
+      status,
+      coordinates: coordinates || null,
+      quantity: quantity || 1,
+      createdAt: new Date().toISOString()
+    };
 
-// ── Serve React Frontend ──────────────────────────────────────
-const staticDir = resolve(__dirname, 'dist');
-app.use(express.static(staticDir));
-
-// ── Health Check ──────────────────────────────────────────────
-app.get('/api/health', (_req, res) => {
-  res.send('OK 👍');
-});
-
-// ── Existing API Routes ────────────────────────────────────────
-const getBookingsPath = resolve(__dirname, 'api/getBookings.js');
-const { default: getBookingsHandler } = await import(`file://${getBookingsPath}`);
-app.get('/api/bookings', getBookingsHandler);
-
-const postBookingPath = resolve(__dirname, 'api/postBooking.js');
-const { default: postBookingHandler } = await import(`file://${postBookingPath}`);
-app.post('/api/bookings', postBookingHandler);
-
-import serviceOrdersRouter from './api/serviceOrders.js';
-app.use('/api/serviceOrders', serviceOrdersRouter);
-
-const postCareerPath = resolve(__dirname, 'api/postCareerApplication.js');
-const { default: postCareerHandler } = await import(`file://${postCareerPath}`);
-app.post('/api/career/apply', postCareerHandler);
-
-import careerApplicationsRouter from './api/careerApplications.js';
-app.use('/api/career/applications', careerApplicationsRouter);
-
-// ── MPESA STK‑Push & Callback Routes ──────────────────────────
-import stkpushRouter from './api/stkpush.js';
-import callbackRouter from './api/callback.js';
-app.use('/api/mpesa', stkpushRouter);
-app.use('/api/mpesa', callbackRouter);
-
-// ── Fallback: Serve index.html for SPA ────────────────────────
-app.get('*', (_req, res) => {
-  res.sendFile(join(staticDir, 'index.html'));
+    const docRef = await addDoc(collection(db, 'bookings'), newBooking);
+    return res.status(200).json({ success: true, id: docRef.id });
+  } catch (error) {
+    console.error('Error saving booking:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
-// ── Launch Server ─────────────────────────────────────────────
-const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
-});
+export default router;
