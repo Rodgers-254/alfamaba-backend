@@ -1,5 +1,5 @@
 // api/serviceOrders.js
-import { db } from '../firebaseconfig.js';
+import { db } from '../../firebaseconfig.js';
 import { collection, addDoc } from 'firebase/firestore';
 
 export default async function handler(req, res) {
