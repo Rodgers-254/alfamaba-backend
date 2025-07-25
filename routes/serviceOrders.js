@@ -1,6 +1,6 @@
 // routes/serviceOrders.js
 import express from 'express';
-import { db } from '../firebaseconfig.js';
+import { db } from '../firebaseAdmin.js'; // ✅ Use shared initialized Firebase app
 
 const router = express.Router();
 
