@@ -1,15 +1,17 @@
 // routes/bookings.js
+
 import express from 'express';
-import { db } from '../firebaseAdmin.js';
+import { db } from '../firebaseAdmin.js'; // Using Firebase Admin SDK
 import twilio from 'twilio';
 
 const router = express.Router();
 
-// Initialize Twilio
+// ✅ Load Twilio credentials from environment variables
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
-const fromPhone = process.env.TWILIO_PHONE_NUMBER;
+const twilioPhone = process.env.TWILIO_PHONE_NUMBER;
 
+// ✅ Initialize Twilio client
 const twilioClient = twilio(accountSid, authToken);
 
 // POST /api/bookings — create a new booking
@@ -27,14 +29,15 @@ router.post('/', async (req, res) => {
       category,
       location,
       price,
-      createdAt
+      createdAt,
     } = req.body;
 
-    // Simple validation
+    // Basic validation
     if (!name || !phone || !serviceName) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
+    // Construct booking data
     const docData = {
       name,
       phone,
@@ -51,23 +54,25 @@ router.post('/', async (req, res) => {
       status: 'PendingPayment',
     };
 
-    // Save to Firestore
+    // 🔥 Save booking to Firestore
     const docRef = await db.collection('bookings').add(docData);
 
-    // Format the phone number
-    const formattedPhone = phone.startsWith('+') ? phone : `+254${phone.replace(/^0+/, '')}`;
+    // 📨 Send SMS with Twilio
+    const smsMessage = `Hi ${name}, your booking for ${subserviceName || serviceName} has been received and scheduled for ${date} at ${time}.`;
 
-    // Send Twilio SMS
-    const message = `✅ Hello ${name}, your booking for ${serviceName} on ${date} at ${time} has been received. We’ll contact you shortly. - Alfamaba`;
+    const formattedPhone = phone.startsWith('+')
+      ? phone
+      : `+254${phone.slice(-9)}`; // Formats Kenyan numbers
+
     await twilioClient.messages.create({
-      body: message,
-      from: fromPhone,
+      body: smsMessage,
+      from: twilioPhone,
       to: formattedPhone,
     });
 
     return res.status(200).json({ success: true, id: docRef.id });
   } catch (err) {
-    console.error('Error saving booking or sending SMS:', err.message || err);
+    console.error('❌ Booking error:', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -79,7 +84,7 @@ router.get('/', async (_req, res) => {
     const list = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     return res.json({ success: true, bookings: list });
   } catch (err) {
-    console.error('Error fetching bookings:', err);
+    console.error('❌ Error fetching bookings:', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
