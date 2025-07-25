@@ -1,17 +1,24 @@
-// alfamaba-backend/firebaseadmin.js
-import { initializeApp, applicationDefault } from 'firebase-admin/app';
+// firebaseAdmin.js (at project root)
+import { cert, initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
-import { getAuth } from 'firebase-admin/auth';
-import { getStorage } from 'firebase-admin/storage';
-import admin from 'firebase-admin';
 
-const app = initializeApp({
-  credential: applicationDefault(),
-  storageBucket: 'alfamaba-ed838.appspot.com',
+if (!process.env.FIREBASE_ADMIN_JSON) {
+  console.error('❌ Missing FIREBASE_ADMIN_JSON env‑var');
+  process.exit(1);
+}
+
+let serviceAccount;
+try {
+  serviceAccount = JSON.parse(process.env.FIREBASE_ADMIN_JSON);
+} catch (err) {
+  console.error('❌ Failed to parse FIREBASE_ADMIN_JSON:', err);
+  process.exit(1);
+}
+
+const admin = initializeApp({
+  credential: cert(serviceAccount),
 });
 
-const db = getFirestore(app);
-const auth = getAuth(app);
-const bucket = getStorage(app);
+const db = getFirestore();
 
-export { admin, db, auth, bucket };
+export { admin, db };

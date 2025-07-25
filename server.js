@@ -2,30 +2,7 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import { cert, initializeApp } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
-
-//
-// ─── FIREBASE ADMIN INIT FROM ENV ───────────────────────────────────────
-//
-if (!process.env.FIREBASE_ADMIN_JSON) {
-  console.error('❌ Missing FIREBASE_ADMIN_JSON env‑var');
-  process.exit(1);
-}
-
-let serviceAccount;
-try {
-  serviceAccount = JSON.parse(process.env.FIREBASE_ADMIN_JSON);
-} catch (err) {
-  console.error('❌ Failed to parse FIREBASE_ADMIN_JSON:', err);
-  process.exit(1);
-}
-
-initializeApp({
-  credential: cert(serviceAccount),
-});
-
-export const db = getFirestore();
+import { db } from './firebaseAdmin.js'; // ✅ Corrected: importing db directly from root-level firebaseAdmin.js
 
 //
 // ─── ROUTES ─────────────────────────────────────────────────────────────
