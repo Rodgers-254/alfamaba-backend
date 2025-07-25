@@ -1,17 +1,10 @@
-// backend/routes/bookings.js
+// routes/bookings.js
 import express from 'express';
-import twilio from 'twilio';
-import { db } from '../firebaseconfig.js';                   // your admin‑initialized Firestore
-import { collection, addDoc } from 'firebase-admin/firestore';
+import { db } from '../firebaseconfig.js';  // your admin init file
 
 const router = express.Router();
 
-// Twilio client
-const client = twilio(
-  process.env.TWILIO_SID,
-  process.env.TWILIO_TOKEN
-);
-
+// POST /api/bookings — create a new booking
 router.post('/', async (req, res) => {
   try {
     const {
@@ -25,16 +18,16 @@ router.post('/', async (req, res) => {
       subserviceName,
       category,
       location,
-      price = 0
+      price,
+      createdAt
     } = req.body;
 
-    // Validate required fields
-    if (!name || !phone || !serviceName || !subserviceName) {
-      return res.status(400).json({ error: 'Missing required booking fields' });
+    // Simple validation
+    if (!name || !phone || !serviceName) {
+      return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    // Prepare Firestore document
-    const createdAt = new Date().toISOString();
+    // Build your Firestore document
     const docData = {
       name,
       phone,
@@ -43,41 +36,31 @@ router.post('/', async (req, res) => {
       quantity,
       serviceId: serviceId || '',
       serviceName,
-      subserviceName,
+      subserviceName: subserviceName || '',
       category: category || '',
-      price,
-      location,         // { address } or { latitude, longitude }
-      createdAt
+      location: location || null,
+      price: typeof price === 'number' ? price : 0,
+      createdAt: createdAt || new Date().toISOString(),
+      status: 'PendingPayment',
     };
 
     // Save to Firestore
-    const docRef = await addDoc(collection(db, 'bookings'), docData);
-
-    // Compose WhatsApp message
-    const locationDesc = location.address
-      ? location.address
-      : `Lat ${location.latitude}, Lng ${location.longitude}`;
-
-    const messageBody = 
-      `✂️ New Booking (${docRef.id}):\n` +
-      `Name: ${name}\n` +
-      `Phone: ${phone}\n` +
-      `Service: ${serviceName} → ${subserviceName}\n` +
-      `Quantity: ${quantity} @ KES ${price}\n` +
-      `When: ${date} @ ${time}\n` +
-      `Where: ${locationDesc}`;
-
-    // Send via Twilio WhatsApp
-    await client.messages.create({
-      from: `whatsapp:${process.env.TWILIO_FROM}`,
-      to:   `whatsapp:${process.env.TWILIO_ADMIN}`,
-      body: messageBody
-    });
-
-    // Respond to the client
+    const docRef = await db.collection('bookings').add(docData);
     return res.status(200).json({ success: true, id: docRef.id });
   } catch (err) {
-    console.error('Booking handler error:', err);
+    console.error('Error saving booking:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// (Optional) GET /api/bookings — list bookings
+router.get('/', async (_req, res) => {
+  try {
+    const snap = await db.collection('bookings').orderBy('createdAt', 'desc').get();
+    const list = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    return res.json({ success: true, bookings: list });
+  } catch (err) {
+    console.error('Error fetching bookings:', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
