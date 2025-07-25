@@ -10,7 +10,7 @@ app.use(cors());
 app.use(express.json());
 
 // ✅ Mount your serviceOrders route
-app.use('/api/serviceOrders', serviceOrdersRoute);
+app.use('/serviceOrders', serviceOrdersRoute);
 
 // Optional: simple route to confirm server is running
 app.get('/', (req, res) => {
