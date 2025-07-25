@@ -1,8 +1,16 @@
 // routes/bookings.js
 import express from 'express';
-import { db } from '../firebaseAdmin.js'; // ✅ Corrected: use admin SDK
+import { db } from '../firebaseAdmin.js';
+import twilio from 'twilio';
 
 const router = express.Router();
+
+// Initialize Twilio
+const accountSid = process.env.TWILIO_ACCOUNT_SID;
+const authToken = process.env.TWILIO_AUTH_TOKEN;
+const fromPhone = process.env.TWILIO_PHONE_NUMBER;
+
+const twilioClient = twilio(accountSid, authToken);
 
 // POST /api/bookings — create a new booking
 router.post('/', async (req, res) => {
@@ -27,7 +35,6 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    // Build your Firestore document
     const docData = {
       name,
       phone,
@@ -46,9 +53,21 @@ router.post('/', async (req, res) => {
 
     // Save to Firestore
     const docRef = await db.collection('bookings').add(docData);
+
+    // Format the phone number
+    const formattedPhone = phone.startsWith('+') ? phone : `+254${phone.replace(/^0+/, '')}`;
+
+    // Send Twilio SMS
+    const message = `✅ Hello ${name}, your booking for ${serviceName} on ${date} at ${time} has been received. We’ll contact you shortly. - Alfamaba`;
+    await twilioClient.messages.create({
+      body: message,
+      from: fromPhone,
+      to: formattedPhone,
+    });
+
     return res.status(200).json({ success: true, id: docRef.id });
   } catch (err) {
-    console.error('Error saving booking:', err);
+    console.error('Error saving booking or sending SMS:', err.message || err);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
