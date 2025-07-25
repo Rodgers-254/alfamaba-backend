@@ -1,6 +1,6 @@
 // routes/bookings.js
 import express from 'express';
-import { db } from '../firebaseconfig.js';  // your admin init file
+import { db } from '../firebaseAdmin.js'; // ✅ Corrected: use admin SDK
 
 const router = express.Router();
 
@@ -53,7 +53,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-// (Optional) GET /api/bookings — list bookings
+// GET /api/bookings — list bookings
 router.get('/', async (_req, res) => {
   try {
     const snap = await db.collection('bookings').orderBy('createdAt', 'desc').get();
