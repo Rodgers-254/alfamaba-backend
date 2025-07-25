@@ -1,16 +1,15 @@
 // routes/bookings.js
 import express from 'express';
-import { db } from '../firebaseAdmin.js'; // ✅ admin SDK
+import { db } from '../firebaseAdmin.js';
 import twilio from 'twilio';
 
 const router = express.Router();
 
-// ✅ Twilio config
-const twilioClient = twilio(
-  process.env.TWILIO_ACCOUNT_SID,
-  process.env.TWILIO_AUTH_TOKEN
-);
-const fromNumber = process.env.TWILIO_FROM_NUMBER;
+// Twilio setup
+const accountSid = process.env.TWILIO_ACCOUNT_SID;
+const authToken = process.env.TWILIO_AUTH_TOKEN;
+const fromNumber = process.env.TWILIO_FROM_NUMBER; // e.g. +14155238886 (Twilio sandbox number)
+const twilioClient = twilio(accountSid, authToken);
 
 // POST /api/bookings — create a new booking
 router.post('/', async (req, res) => {
@@ -30,10 +29,12 @@ router.post('/', async (req, res) => {
       createdAt,
     } = req.body;
 
+    // 🔍 Validate required fields
     if (!name || !phone || !serviceName) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
+    // 🧾 Build Firestore document
     const docData = {
       name,
       phone,
@@ -45,52 +46,31 @@ router.post('/', async (req, res) => {
       subserviceName: subserviceName || '',
       category: category || '',
       location: location || null,
-      price: typeof price === 'number' ? price : parseFloat(price) || 0,
+      price: typeof price === 'number' ? price : parseInt(price) || 0,
       createdAt: createdAt || new Date().toISOString(),
       status: 'PendingPayment',
     };
 
-    // Save to Firestore
+    // 💾 Save to Firestore
     const docRef = await db.collection('bookings').add(docData);
-    const bookingId = docRef.id;
 
-    // ✅ Format phone to international if necessary
-    const formattedPhone = phone.startsWith('+') ? phone : `+254${phone.replace(/^0/, '')}`;
+    // ✅ Format phone with country code
+    const formattedPhone = phone.startsWith('+') ? phone : `+${phone}`;
 
-    // ✅ Create SMS message content
-    const smsMessage = `Alfamaba Booking ✅\n${serviceName} > ${subserviceName}\nFor: ${name} at ${time}, ${date}\nLocation: ${
-      location?.address || `${location?.latitude},${location?.longitude}`
-    }\nThank you!`;
+    // 💬 WhatsApp message body
+    const smsMessage = `✅ Hi ${name}, your booking for ${subserviceName || serviceName} has been received. We’ll come to ${location?.address || 'your location'} on ${date} at ${time}. Thank you for choosing Alfamaba!`;
 
-    // ✅ Send SMS via Twilio
-    await twilioClient.messages
-      .create({
-        body: smsMessage,
-        from: fromNumber,
-        to: formattedPhone,
-      })
-      .then(msg => console.log('📤 SMS sent:', msg.sid))
-      .catch(err => {
-        console.error('❌ Twilio SMS error:', err);
-        // Don't fail the request because of SMS issue
-      });
+    // 📲 Send WhatsApp message
+    await twilioClient.messages.create({
+      body: smsMessage,
+      from: `whatsapp:${fromNumber}`,
+      to: `whatsapp:${formattedPhone}`,
+    });
 
-    return res.status(200).json({ success: true, id: bookingId });
+    return res.status(200).json({ success: true, id: docRef.id });
   } catch (err) {
-    console.error('🔥 Booking save error:', err);
-    return res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// GET /api/bookings — list bookings
-router.get('/', async (_req, res) => {
-  try {
-    const snap = await db.collection('bookings').orderBy('createdAt', 'desc').get();
-    const list = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    return res.json({ success: true, bookings: list });
-  } catch (err) {
-    console.error('Error fetching bookings:', err);
-    return res.status(500).json({ error: 'Internal server error' });
+    console.error('❌ Error in /api/bookings:', err?.message || err);
+    return res.status(500).json({ error: 'Failed to process booking' });
   }
 });
 
