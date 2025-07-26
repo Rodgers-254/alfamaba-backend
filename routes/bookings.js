@@ -1,17 +1,11 @@
 // routes/bookings.js
 import express from 'express';
-import { db } from '../firebaseAdmin.js';
-import twilio from 'twilio';
+import { db } from '../firebaseAdmin.js'; // Admin SDK
+import admin from 'firebase-admin';
 
 const router = express.Router();
 
-const accountSid = process.env.TWILIO_SID;
-const authToken = process.env.TWILIO_TOKEN;
-const fromNumber = `whatsapp:${process.env.TWILIO_FROM}`;
-const toNumber = `whatsapp:${process.env.TWILIO_ADMIN}`;
-
-const client = twilio(accountSid, authToken);
-
+// 🔥 POST /api/bookings
 router.post('/', async (req, res) => {
   try {
     const {
@@ -25,14 +19,31 @@ router.post('/', async (req, res) => {
       subserviceName,
       category,
       location,
-      price,
-      createdAt
+      createdAt,
     } = req.body;
 
-    if (!name || !phone || !serviceName) {
+    if (!name || !phone || !serviceName || !subserviceName) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
+    // ✅ Step 1: Get the service document
+    const serviceRef = db.collection('services').doc(serviceId);
+    const serviceSnap = await serviceRef.get();
+
+    if (!serviceSnap.exists) {
+      return res.status(404).json({ error: 'Service not found in Firestore' });
+    }
+
+    const serviceData = serviceSnap.data();
+
+    // ✅ Step 2: Get the subservice price
+    const matchedSub = serviceData.subservices?.find(
+      s => s.name.toLowerCase() === subserviceName.toLowerCase()
+    );
+
+    const price = matchedSub?.price || 0;
+
+    // ✅ Step 3: Save booking
     const docData = {
       name,
       phone,
@@ -41,38 +52,20 @@ router.post('/', async (req, res) => {
       quantity,
       serviceId: serviceId || '',
       serviceName,
-      subserviceName: subserviceName || '',
+      subserviceName,
       category: category || '',
       location: location || null,
-      price: typeof price === 'number' ? price : 0,
+      price, // ✅ Price now correctly set
       createdAt: createdAt || new Date().toISOString(),
       status: 'PendingPayment',
     };
 
     const docRef = await db.collection('bookings').add(docData);
 
-    // ✅ Send WhatsApp via Twilio (SAME AS OLD WORKING POST)
-    const messageBody = [
-      "📦 *New Booking!*",
-      `• *Name:* ${name}`,
-      `• *Phone:* ${phone}`,
-      `• *Date:* ${date} at ${time}`,
-      `• *Service:* ${serviceName} — ${subserviceName}`,
-      `• *Qty:* ${quantity}`,
-      `• *Location:* ${location?.address || `${location.latitude}, ${location.longitude}`}`
-    ].join("\n");
-
-    await client.messages.create({
-      from: fromNumber,
-      to: toNumber,
-      body: messageBody,
-    });
-
     return res.status(200).json({ success: true, id: docRef.id });
-
   } catch (err) {
-    console.error('❌ Booking or WhatsApp error:', err.message || err);
-    return res.status(500).json({ error: 'Failed to process booking' });
+    console.error('❌ Error creating booking:', err);
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
