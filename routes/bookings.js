@@ -5,13 +5,15 @@ import twilio from 'twilio';
 
 const router = express.Router();
 
-// Twilio setup
-const accountSid = process.env.TWILIO_ACCOUNT_SID;
-const authToken = process.env.TWILIO_AUTH_TOKEN;
-const fromNumber = process.env.TWILIO_FROM_NUMBER; // e.g. +14155238886 (Twilio sandbox number)
-const twilioClient = twilio(accountSid, authToken);
+// ✅ Twilio config from environment variables
+const accountSid = process.env.TWILIO_SID;
+const authToken = process.env.TWILIO_TOKEN;
+const twilioFrom = process.env.TWILIO_FROM; // e.g. 'whatsapp:+14155238886'
+const twilioAdmin = process.env.TWILIO_ADMIN; // e.g. 'whatsapp:+254116560425'
 
-// POST /api/bookings — create a new booking
+const client = twilio(accountSid, authToken);
+
+// POST /api/bookings — create a new booking & send WhatsApp
 router.post('/', async (req, res) => {
   try {
     const {
@@ -29,12 +31,10 @@ router.post('/', async (req, res) => {
       createdAt,
     } = req.body;
 
-    // 🔍 Validate required fields
     if (!name || !phone || !serviceName) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    // 🧾 Build Firestore document
     const docData = {
       name,
       phone,
@@ -46,31 +46,39 @@ router.post('/', async (req, res) => {
       subserviceName: subserviceName || '',
       category: category || '',
       location: location || null,
-      price: typeof price === 'number' ? price : parseInt(price) || 0,
+      price: typeof price === 'number' ? price : 0,
       createdAt: createdAt || new Date().toISOString(),
       status: 'PendingPayment',
     };
 
-    // 💾 Save to Firestore
+    // Save to Firestore
     const docRef = await db.collection('bookings').add(docData);
 
-    // ✅ Format phone with country code
-    const formattedPhone = phone.startsWith('+') ? phone : `+${phone}`;
+    // Build WhatsApp message
+    const message = [
+      '📦 *New Booking!*',
+      `• *Name:* ${name}`,
+      `• *Phone:* ${phone}`,
+      `• *When:* ${date} @ ${time}`,
+      `• *Service:* ${serviceName} — ${subserviceName}`,
+      `• *Location:* ${
+        location?.address || `${location?.latitude}, ${location?.longitude}`
+      }`,
+    ].join('\n');
 
-    // 💬 WhatsApp message body
-    const smsMessage = `✅ Hi ${name}, your booking for ${subserviceName || serviceName} has been received. We’ll come to ${location?.address || 'your location'} on ${date} at ${time}. Thank you for choosing Alfamaba!`;
-
-    // 📲 Send WhatsApp message
-    await twilioClient.messages.create({
-      body: smsMessage,
-      from: `whatsapp:${fromNumber}`,
-      to: `whatsapp:${formattedPhone}`,
+    // Send WhatsApp message
+    await client.messages.create({
+      from: twilioFrom,
+      to: twilioAdmin,
+      body: message,
     });
 
+    console.log('✅ WhatsApp message sent to admin.');
     return res.status(200).json({ success: true, id: docRef.id });
+
   } catch (err) {
-    console.error('❌ Error in /api/bookings:', err?.message || err);
-    return res.status(500).json({ error: 'Failed to process booking' });
+    console.error('❌ Booking or WhatsApp error:', err.message);
+    return res.status(500).json({ error: 'Booking failed' });
   }
 });
 
