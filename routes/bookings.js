@@ -1,20 +1,18 @@
 // routes/bookings.js
 import express from 'express';
 import { db } from '../firebaseAdmin.js';
-import admin from 'firebase-admin';
 import twilio from 'twilio';
 
 const router = express.Router();
 
-// 🔐 Twilio config from environment
-const accountSid = process.env.TWILIO_SID;
-const authToken = process.env.TWILIO_AUTH_TOKEN;
-const fromWhatsApp = process.env.TWILIO_FROM; // e.g. 'whatsapp:+14155238886'
-const adminWhatsApp = process.env.TWILIO_ADMIN; // e.g. 'whatsapp:+2547xxxxxxx'
+// Load Twilio config
+const accountSid    = process.env.TWILIO_SID;
+const authToken     = process.env.TWILIO_AUTH_TOKEN;
+const fromWhatsApp  = process.env.TWILIO_FROM;    // must be "whatsapp:+14155238886"
+const adminWhatsApp = process.env.TWILIO_ADMIN;   // must be "whatsapp:+2547XXXXXXX"
 
-// Debug log to verify env vars
-console.log('Twilio Config:', {
-  accountSid,
+console.log('⚙️ Booking route Twilio config:', {
+  accountSid: accountSid ? '***' : undefined,
   authToken: authToken ? '***' : undefined,
   fromWhatsApp,
   adminWhatsApp,
@@ -23,18 +21,20 @@ console.log('Twilio Config:', {
 const client = twilio(accountSid, authToken);
 
 router.post('/', async (req, res) => {
+  console.log('📨 /api/bookings request body:', req.body);
+
   try {
     const {
       name,
       phone,
-      date,
-      time,
-      quantity = 1,
+      date      = '',
+      time      = '',
+      quantity  = 1,
       serviceId,
       serviceName,
       subserviceName,
-      category,
-      location,
+      category   = '',
+      location   = null,
       createdAt,
     } = req.body;
 
@@ -42,61 +42,74 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    const serviceRef = db.collection('services').doc(serviceId);
-    const serviceSnap = await serviceRef.get();
-
+    // 1) Fetch service & price
+    const serviceSnap = await db.collection('services').doc(serviceId).get();
     if (!serviceSnap.exists) {
       return res.status(404).json({ error: 'Service not found' });
     }
-
     const serviceData = serviceSnap.data();
-
     const matchedSub = serviceData.subservices?.find(
       s => s.name.toLowerCase() === subserviceName.toLowerCase()
     );
-
     const price = matchedSub?.price || 0;
 
-    const docData = {
+    // 2) Save booking
+    const bookingData = {
       name,
       phone,
-      date: date || '',
-      time: time || '',
+      date,
+      time,
       quantity,
       serviceId,
       serviceName,
       subserviceName,
-      category: category || '',
-      location: location || null,
+      category,
+      location,
       price,
       createdAt: createdAt || new Date().toISOString(),
       status: 'PendingPayment',
     };
+    const docRef = await db.collection('bookings').add(bookingData);
+    console.log('✅ Booking saved with ID:', docRef.id);
 
-    const docRef = await db.collection('bookings').add(docData);
-
-    // ✅ Send WhatsApp message to admin (only if config is valid)
-    const messageBody = `📦 New Booking:\nName: ${name}\nPhone: ${phone}\nService: ${serviceName} > ${subserviceName}\nDate: ${date || 'N/A'}\nTime: ${time || 'N/A'}\nQty: ${quantity}\nPrice: KES ${price}\nLocation: ${location?.address || 'N/A'}`;
-
+    // 3) Send WhatsApp
     if (!fromWhatsApp || !adminWhatsApp) {
-      console.warn('🚫 Missing Twilio WhatsApp numbers. Message not sent.');
-    } else {
-      try {
-        await client.messages.create({
-          body: messageBody,
-          from: fromWhatsApp,
-          to: adminWhatsApp,
-        });
-        console.log('✅ WhatsApp message sent to admin.');
-      } catch (twilioErr) {
-        console.error('❌ Twilio message error:', twilioErr.message);
-      }
+      console.warn('⚠️ Twilio WhatsApp numbers not set; skipping message send.');
+      return res.json({ success: true, id: docRef.id, messageSent: false });
     }
 
-    return res.status(200).json({ success: true, id: docRef.id });
-  } catch (err) {
-    console.error('❌ Error creating booking:', err);
-    return res.status(500).json({ error: 'Internal server error' });
+    const messageBody = [
+      `📦 *New Booking*`,
+      `👤 Name: ${name}`,
+      `📞 Phone: ${phone}`,
+      `💈 Service: ${serviceName} > ${subserviceName}`,
+      `📅 Date: ${date || 'N/A'}`,
+      `⏰ Time: ${time || 'N/A'}`,
+      `🔢 Qty: ${quantity}`,
+      `💰 Price: KES ${price}`,
+      `📍 Location: ${location?.address || JSON.stringify(location) || 'N/A'}`
+    ].join('\n');
+
+    console.log('📤 Sending WhatsApp:', { from: fromWhatsApp, to: adminWhatsApp, body: messageBody });
+
+    // **Force errors to surface**
+    const twResp = await client.messages.create({
+      from: fromWhatsApp,
+      to:   adminWhatsApp,
+      body: messageBody,
+    });
+    console.log('✅ Twilio response SID:', twResp.sid);
+
+    // 4) Respond with messageSent flag
+    return res.json({ success: true, id: docRef.id, messageSent: true });
+  }
+  catch (err) {
+    console.error('❌ /api/bookings error:', err);
+    // Return the Twilio or other error to the frontend
+    return res.status(500).json({
+      error: 'Internal server error',
+      details: err.message
+    });
   }
 });
 
