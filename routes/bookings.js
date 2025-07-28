@@ -10,7 +10,15 @@ const router = express.Router();
 const accountSid = process.env.TWILIO_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
 const fromWhatsApp = process.env.TWILIO_FROM; // e.g. 'whatsapp:+14155238886'
-const adminWhatsApp = process.env.TWILIO_ADMIN; // your number e.g. 'whatsapp:+2547xxxxxx'
+const adminWhatsApp = process.env.TWILIO_ADMIN; // e.g. 'whatsapp:+2547xxxxxxx'
+
+// Debug log to verify env vars
+console.log('Twilio Config:', {
+  accountSid,
+  authToken: authToken ? '***' : undefined,
+  fromWhatsApp,
+  adminWhatsApp,
+});
 
 const client = twilio(accountSid, authToken);
 
@@ -67,14 +75,23 @@ router.post('/', async (req, res) => {
 
     const docRef = await db.collection('bookings').add(docData);
 
-    // ✅ Send WhatsApp message after saving booking
+    // ✅ Send WhatsApp message to admin (only if config is valid)
     const messageBody = `📦 New Booking:\nName: ${name}\nPhone: ${phone}\nService: ${serviceName} > ${subserviceName}\nDate: ${date || 'N/A'}\nTime: ${time || 'N/A'}\nQty: ${quantity}\nPrice: KES ${price}\nLocation: ${location?.address || 'N/A'}`;
 
-    await client.messages.create({
-      body: messageBody,
-      from: fromWhatsApp,
-      to: adminWhatsApp,
-    });
+    if (!fromWhatsApp || !adminWhatsApp) {
+      console.warn('🚫 Missing Twilio WhatsApp numbers. Message not sent.');
+    } else {
+      try {
+        await client.messages.create({
+          body: messageBody,
+          from: fromWhatsApp,
+          to: adminWhatsApp,
+        });
+        console.log('✅ WhatsApp message sent to admin.');
+      } catch (twilioErr) {
+        console.error('❌ Twilio message error:', twilioErr.message);
+      }
+    }
 
     return res.status(200).json({ success: true, id: docRef.id });
   } catch (err) {
