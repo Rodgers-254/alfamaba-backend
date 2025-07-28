@@ -5,11 +5,19 @@ import twilio from 'twilio';
 
 const router = express.Router();
 
-// Load Twilio config
+// Load Twilio config (with fallback)
 const accountSid    = process.env.TWILIO_SID;
-const authToken     = process.env.TWILIO_AUTH_TOKEN;
-const fromWhatsApp  = process.env.TWILIO_FROM;    // must be "whatsapp:+14155238886"
-const adminWhatsApp = process.env.TWILIO_ADMIN;   // must be "whatsapp:+2547XXXXXXX"
+const authToken     = process.env.TWILIO_AUTH_TOKEN || process.env.TWILIO_TOKEN;
+let   fromWhatsApp  = process.env.TWILIO_FROM;    // e.g. 'whatsapp:+14155238886' or '+14155238886'
+let   adminWhatsApp = process.env.TWILIO_ADMIN;   // e.g. 'whatsapp:+2547XXXXXXX' or '+2547XXXXXXX'
+
+// Ensure the “whatsapp:” prefix is present
+if (fromWhatsApp && !fromWhatsApp.startsWith('whatsapp:')) {
+  fromWhatsApp = `whatsapp:${fromWhatsApp}`;
+}
+if (adminWhatsApp && !adminWhatsApp.startsWith('whatsapp:')) {
+  adminWhatsApp = `whatsapp:${adminWhatsApp}`;
+}
 
 console.log('⚙️ Booking route Twilio config:', {
   accountSid: accountSid ? '***' : undefined,
@@ -72,9 +80,13 @@ router.post('/', async (req, res) => {
     const docRef = await db.collection('bookings').add(bookingData);
     console.log('✅ Booking saved with ID:', docRef.id);
 
-    // 3) Send WhatsApp
+    // 3) Send WhatsApp (only if properly configured)
+    if (!accountSid || !authToken) {
+      console.warn('⚠️ Twilio credentials missing – skipping message send.');
+      return res.json({ success: true, id: docRef.id, messageSent: false });
+    }
     if (!fromWhatsApp || !adminWhatsApp) {
-      console.warn('⚠️ Twilio WhatsApp numbers not set; skipping message send.');
+      console.warn('⚠️ Twilio WhatsApp numbers not set – skipping message send.');
       return res.json({ success: true, id: docRef.id, messageSent: false });
     }
 
@@ -92,7 +104,6 @@ router.post('/', async (req, res) => {
 
     console.log('📤 Sending WhatsApp:', { from: fromWhatsApp, to: adminWhatsApp, body: messageBody });
 
-    // **Force errors to surface**
     const twResp = await client.messages.create({
       from: fromWhatsApp,
       to:   adminWhatsApp,
@@ -100,12 +111,11 @@ router.post('/', async (req, res) => {
     });
     console.log('✅ Twilio response SID:', twResp.sid);
 
-    // 4) Respond with messageSent flag
+    // 4) Respond
     return res.json({ success: true, id: docRef.id, messageSent: true });
   }
   catch (err) {
     console.error('❌ /api/bookings error:', err);
-    // Return the Twilio or other error to the frontend
     return res.status(500).json({
       error: 'Internal server error',
       details: err.message
